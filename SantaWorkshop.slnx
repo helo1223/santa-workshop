@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="SantaWorkshop.vcxproj" Id="13e005f4-6f5d-4eb7-98e4-c59913a34308" />
+</Solution>
