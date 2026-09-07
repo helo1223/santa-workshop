@@ -1590,8 +1590,8 @@ static void DrawSantaSpawn(const LvlxLevel& level, RenderAsset& santaAsset,
     if (!santaAsset.loaded) return;
 
     const Vector3 position = ToRaylib(level.spawn_position);
-    // The trailer angle initializes the follow camera, not Santa's heading.
-    const float angle = 0.0f;
+    // The model faces opposite the spawn's zero heading and uses reversed rotation.
+    const float angle = 180.0f - level.initial_camera_heading_degrees;
     for (size_t modelIndex = 0; modelIndex < santaAsset.models.size(); ++modelIndex) {
         Model& model = santaAsset.models[modelIndex];
         SetAlphaCutoff(santaAsset, modelIndex);
@@ -3136,9 +3136,8 @@ static Vector3 RingPoint(Vector3 origin, GizmoAxis axis, float radius, float ang
 
 static void DrawRotateGizmo(Vector3 origin, float radius, GizmoAxis hotAxis) {
     const int segments = 64;
-    for (GizmoAxis axis : {GizmoAxis::X, GizmoAxis::Y, GizmoAxis::Z}) {
-        const bool supported = axis == GizmoAxis::Y;
-        Color color = axis == hotAxis ? YELLOW : GizmoAxisColor(axis, supported);
+    for (GizmoAxis axis : {GizmoAxis::Y}) {
+        Color color = axis == hotAxis ? YELLOW : GizmoAxisColor(axis);
         Vector3 previous = RingPoint(origin, axis, radius, 0.0f);
         for (int i = 1; i <= segments; ++i) {
             const float angle = (2.0f * PI * i) / segments;
@@ -3154,7 +3153,7 @@ static GizmoAxis PickRotateGizmo(const Camera3D& camera, Vector3 origin,
     const int segments = 48;
     GizmoAxis best = GizmoAxis::None;
     float bestDistance = 9.0f;
-    for (GizmoAxis axis : {GizmoAxis::X, GizmoAxis::Y, GizmoAxis::Z}) {
+    for (GizmoAxis axis : {GizmoAxis::Y}) {
         Vector2 previous = GetWorldToScreen(RingPoint(origin, axis, radius, 0.0f), camera);
         for (int i = 1; i <= segments; ++i) {
             const float angle = (2.0f * PI * i) / segments;
@@ -4461,8 +4460,10 @@ int main(int argc, char** argv) {
                         const float angle = AngleAroundY(gizmoDrag.startPosition, hit);
                         float deltaDegrees = (angle - gizmoDrag.startAngle) * RAD2DEG;
                         deltaDegrees = SnapValue(deltaDegrees, 90.0f);
+                        // The preview uses 180 - heading, so add the drag angle
+                        // to keep the visible rotation following the mouse.
                         lvlx_set_spawn_transform(&level, level.spawn_position,
-                            cameraHeadingStart - deltaDegrees);
+                            cameraHeadingStart + deltaDegrees);
                         dirty = !EditorStatesEqual(CaptureEditor(level), savedSnapshot);
                     }
                 }
@@ -4668,20 +4669,6 @@ int main(int argc, char** argv) {
         }
         // Transparent particles are sorted and drawn after opaque scene geometry.
         if (effectsEnabled) effectPreview.Draw(camera);
-        if (level.has_spawn_data) {
-            // The spawn marker is an editor overlay, visible even inside the
-            // death-zone cap. Flush on both sides of the depth-state changes.
-            rlDrawRenderBatchActive();
-            rlDisableDepthTest();
-            rlDisableDepthMask();
-            const Vector3 marker = Vector3Add(ToRaylib(level.spawn_position),
-                Vector3{0, 0.015f, 0});
-            DrawCylinder(marker, 1.35f, 1.35f, 0.03f, 48, Fade(LIME, 0.24f));
-            DrawCylinderWires(marker, 1.35f, 1.35f, 0.03f, 48, Fade(LIME, 0.85f));
-            rlDrawRenderBatchActive();
-            rlEnableDepthMask();
-            rlEnableDepthTest();
-        }
         EndMode3D();
 
         if (marqueeActive) {
