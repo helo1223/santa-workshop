@@ -5,6 +5,11 @@ LVLX `.dat` levels and CRF models, supports element and movement-route editing,
 undo/redo, environment settings, collision and animation previews, particle
 effects, and exporting edits as a mod.
 
+For HD compatibility, LVLX versions 2 through 255 are preserved. Versions above
+2 use the attachment-key element layout used by v3; the retail loader does not
+impose a later-version ceiling. Legacy v0/v1 levels remain read-only because
+their missing-trailer defaults are not an authoring contract.
+
 Game resources are not included. Building requires the C/C++ toolchain and
 raylib; running the editor also requires a local game installation or extracted
 resource tree.

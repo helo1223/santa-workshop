@@ -654,7 +654,10 @@ static void ApplyEnvironmentPreview(const Camera3D& camera) {
     // CONFIRMED 00489070: (cos(b)cos(a),sin(b),cos(b)sin(a)); negate imported Z.
     const float a = angles[0] * DEG2RAD, b = angles[1] * DEG2RAD;
     const float direction[] = {cosf(b)*cosf(a), sinf(b), -cosf(b)*sinf(a)};
-    if (light[0] + light[1] + light[2] <= 0) light = {};
+    // The game submits the directional record only when average RGB is
+    // strictly greater than 0.001 (004552b0). Match that boundary so very dim
+    // authored lights do not appear in the editor when the game omits them.
+    if ((light[0] + light[1] + light[2]) / 3.0f <= 0.001f) light = {};
     set(gCrfShader, "ambientColor", ambient.data(), SHADER_UNIFORM_VEC3);
     set(gCrfShader, "ambientBottomColor", ambientBottom.data(), SHADER_UNIFORM_VEC3);
     set(gCrfShader, "lightColor", light.data(), SHADER_UNIFORM_VEC3);
@@ -2813,7 +2816,10 @@ static LevelValidation ValidateLevel(const LvlxLevel& level,
     int routeStartMisses = 0, unusualMarkers = 0;
     std::unordered_set<uint32_t> referencedWaylists;
 
-    const bool invalidVersion = level.version != 2u && level.version != 3u;
+    // The HD loader treats every version >2 as the same attachment-key record
+    // layout and accepts the full byte range. Versions 0/1 use the unsupported
+    // legacy no-trailer contract; v2+ retains the required 24-byte trailer.
+    const bool invalidVersion = level.version < 2u;
     const bool invalidTrailer = level.trailing_size != 24u || !level.has_spawn_data;
     if (invalidVersion) ++result.errors;
     if (invalidTrailer) ++result.errors;
