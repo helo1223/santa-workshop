@@ -22,7 +22,22 @@ inline bool validId(const std::string& id) {
 
 // Find shared resources independently of the selected level's directory.
 inline fs::path findBin(const fs::path& level) {
-    for (auto p = fs::absolute(level).parent_path(); !p.empty(); p = p.parent_path()) {
+    const auto absolute = fs::absolute(level);
+    // A mod may contain an additive settings/elements.txt. It is not a full
+    // resource root: prefer the containing game's stock/extracted bank, then
+    // let EditorMain append the mod definitions.
+    for (auto p = absolute.parent_path(); !p.empty(); p = p.parent_path()) {
+        std::string leaf=p.filename().string();
+        for(char& c:leaf)c=(char)std::tolower((unsigned char)c);
+        if(leaf=="mods") {
+            const auto game=p.parent_path();
+            if(fs::is_regular_file(game/"bin_win32/settings/elements.txt"))return game/"bin_win32";
+            if(fs::is_regular_file(game/"settings/elements.txt"))return game;
+            break;
+        }
+        if (p == p.parent_path()) break;
+    }
+    for (auto p = absolute.parent_path(); !p.empty(); p = p.parent_path()) {
         if (fs::is_regular_file(p / "settings/elements.txt")) return p;
         if (fs::is_regular_file(p / "bin_win32/settings/elements.txt")) return p / "bin_win32";
         if (p == p.parent_path()) break;

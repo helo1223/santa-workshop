@@ -14,6 +14,15 @@ Game resources are not included. Building requires the C/C++ toolchain and
 raylib; running the editor also requires a local game installation or extracted
 resource tree.
 
+When opening `mods/<id>/levels/<level>.dat`, SantaWorkshop treats `mods/<id>` as
+an overlay resource root. It appends `settings/elements.txt` to the stock element
+bank and resolves models from `assets/`, textures from `textures/`, and particle
+effects from `effects/`. Each individual file falls back to the game resource
+root when the mod does not override it. Level `.txt` and `.lmd` companions remain
+beside the level. If the game uses packed resources, pass an extracted stock
+`settings/elements.txt` as the second command-line argument; its containing tree
+becomes the fallback root.
+
 ## Prerequisites
 
 - Windows with Visual Studio or Visual Studio Build Tools, the **Desktop

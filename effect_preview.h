@@ -16,7 +16,8 @@ public:
 
     void BuildFrame(const LvlxLevel& level, const LvlxDefinitionTable& definitions,
         const Camera3D& camera, const std::string& effectsDirectory,
-        const std::string& texturesDirectory, float elapsedSeconds,
+        const std::string& texturesDirectory,const std::string& fallbackEffectsDirectory,
+        const std::string& fallbackTexturesDirectory,float elapsedSeconds,
         float nearClipStart, float nearClipEnd);
     // Receiver-local selection: camera-nearest lights can belong to unrelated objects.
     // Seven points plus the directional light fit the recovered eight-light shader.

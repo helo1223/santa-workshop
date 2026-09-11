@@ -74,11 +74,14 @@ extern "C" {
     } LvlxDefinitionTable;
 
     int lvlx_load_level(const char* dat_path, LvlxLevel* result);
+    int lvlx_load_level_memory(const uint8_t* data, size_t size, LvlxLevel* result);
     int lvlx_save_level(const char* dat_path, const LvlxLevel* level);
     void lvlx_free_level(LvlxLevel* level);
 
     int lvlx_load_definitions(const char* elements_path,
         LvlxDefinitionTable* result);
+    int lvlx_append_definitions(const char* elements_path,
+        LvlxDefinitionTable* definitions);
     void lvlx_free_definitions(LvlxDefinitionTable* definitions);
 
     const LvlxElementDefinition* lvlx_find_definition(

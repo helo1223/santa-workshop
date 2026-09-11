@@ -573,18 +573,21 @@ struct EffectPreview::Impl {
     }
 
     CachedTemplate* load(const std::string& filename,const std::string& effectsDir,
-        const std::string& texturesDir) {
+        const std::string& texturesDir,const std::string& fallbackEffects,const std::string& fallbackTextures) {
         const std::string key=Lower(filename);
         CachedTemplate& cached=templates[key];
         if(cached.attempted) return cached.loaded?&cached:nullptr;
         cached.attempted=true;
-        cached.loaded=ParseTemplate(Join(effectsDir,filename),cached.effect);
+        std::string effectPath=Join(effectsDir,filename);
+        if(!FileExists(effectPath.c_str())&&!fallbackEffects.empty())effectPath=Join(fallbackEffects,filename);
+        cached.loaded=ParseTemplate(effectPath,cached.effect);
         if(!cached.loaded){++failed; TraceLog(LOG_WARNING,"Could not decode FXT: %s",filename.c_str()); return nullptr;}
         for(const EffectRecord& record:cached.effect.records) {
             if(record.kind==RecordKind::PointLight||record.texture.filename.empty()) continue;
             const std::string textureKey=Lower(record.texture.filename);
             if(cached.textures.count(textureKey)) continue;
-            const std::string path=Join(texturesDir,record.texture.filename);
+            std::string path=Join(texturesDir,record.texture.filename);
+            if(!FileExists(path.c_str())&&!fallbackTextures.empty())path=Join(fallbackTextures,record.texture.filename);
             Texture2D texture{};
             if(FileExists(path.c_str())) texture=LoadTexture(path.c_str());
             if(texture.id){SetTextureWrap(texture,TEXTURE_WRAP_CLAMP);SetTextureFilter(texture,TEXTURE_FILTER_BILINEAR);}
@@ -595,8 +598,9 @@ struct EffectPreview::Impl {
     }
 
     void addEffect(const std::string& filename,const LvlxElement& element,const Camera3D& camera,
-        const std::string& effectsDir,const std::string& texturesDir,float elapsed,uint32_t salt) {
-        CachedTemplate* cached=load(filename,effectsDir,texturesDir); if(!cached) return;
+        const std::string& effectsDir,const std::string& texturesDir,const std::string& fallbackEffects,
+        const std::string& fallbackTextures,float elapsed,uint32_t salt) {
+        CachedTemplate* cached=load(filename,effectsDir,texturesDir,fallbackEffects,fallbackTextures); if(!cached) return;
         for(size_t ri=0;ri<cached->effect.records.size();++ri){
             const EffectRecord& record=cached->effect.records[ri];
             const float phase=RecordPhase(cached->effect,record,elapsed); if(phase<0) continue;
@@ -700,6 +704,7 @@ EffectPreview::~EffectPreview(){Unload();}
 
 void EffectPreview::BuildFrame(const LvlxLevel& level,const LvlxDefinitionTable& definitions,
     const Camera3D& camera,const std::string& effectsDirectory,const std::string& texturesDirectory,
+    const std::string& fallbackEffectsDirectory,const std::string& fallbackTexturesDirectory,
     float elapsedSeconds,float nearClipStart,float nearClipEnd){
     impl_->particles.clear();impl_->lights.clear();
     impl_->nearClipStart=nearClipStart;impl_->nearClipEnd=nearClipEnd;
@@ -710,6 +715,7 @@ void EffectPreview::BuildFrame(const LvlxLevel& level,const LvlxDefinitionTable&
         attached.vector1.y+=d->vertical_offset;
         for(size_t n=0;n<d->steady_effect_count;++n)
             impl_->addEffect(d->steady_effects[n],attached,camera,effectsDirectory,texturesDirectory,
+                fallbackEffectsDirectory,fallbackTexturesDirectory,
                 elapsedSeconds,Hash(i*131u+(uint32_t)n));
         // Preserve triggered references, but only gameplay activation should play them.
     }

@@ -158,6 +158,41 @@ static std::string FindBinDirectory(const char* levelPath) {
     return levelDirectory;
 }
 
+static std::string gFallbackAssetsDirectory,gFallbackTexturesDirectory,gFallbackEffectsDirectory;
+static std::string ResolveResourceFile(const std::string& primary,
+    const std::string& fallback,const std::string& relative) {
+    const std::string candidate=JoinPath(primary,relative);
+    if(std::filesystem::is_regular_file(candidate)||fallback.empty())return candidate;
+    const std::string inherited=JoinPath(fallback,relative);
+    return std::filesystem::is_regular_file(inherited)?inherited:candidate;
+}
+
+static std::string FindModDirectory(const std::string& levelPath) {
+    namespace fs=std::filesystem;const fs::path level=fs::absolute(levelPath);
+    std::string leaf=level.parent_path().filename().string();
+    for(char& c:leaf)c=(char)std::tolower((unsigned char)c);
+    if(leaf!="levels")return {};
+    const fs::path root=level.parent_path().parent_path();
+    return fs::is_regular_file(root/"mod.json")?NormalizePath(root.string()):std::string{};
+}
+
+static void ConfigureResourceDirectories(const std::string& levelPath,const std::string& bin,
+    std::string& mod,std::string& assets,std::string& textures,std::string& effects) {
+    mod=FindModDirectory(levelPath);const std::string& primary=mod.empty()?bin:mod;
+    assets=JoinPath(primary,"assets");textures=JoinPath(primary,"textures");effects=JoinPath(primary,"effects");
+    gFallbackAssetsDirectory=mod.empty()?std::string{}:JoinPath(bin,"assets");
+    gFallbackTexturesDirectory=mod.empty()?std::string{}:JoinPath(bin,"textures");
+    gFallbackEffectsDirectory=mod.empty()?std::string{}:JoinPath(bin,"effects");
+}
+
+static std::string FindModElementDefinitions(const std::string& levelPath) {
+    namespace fs = std::filesystem;
+    const fs::path level = fs::absolute(levelPath);
+    if (Lowercase(level.parent_path().filename().string()) != "levels") return {};
+    const fs::path candidate = level.parent_path().parent_path() / "settings" / "elements.txt";
+    return fs::is_regular_file(candidate) ? NormalizePath(candidate.string()) : std::string{};
+}
+
 static bool PromptModProject(std::string& modId, std::string& levelId, bool blank) {
     std::string input = "MyMod/first_level";
     while (!WindowShouldClose()) {
@@ -1018,11 +1053,8 @@ static bool LoadRenderAsset(
         return false;
     }
 
-    const std::string modelPath =
-        JoinPath(
-            assetsDirectory,
-            definition.resource
-        );
+    const std::string modelPath=ResolveResourceFile(assetsDirectory,
+        gFallbackAssetsDirectory,definition.resource);
     const bool isGameSky =
         Lowercase(FilenameOf(modelPath)) == "sky_01.crf";
 
@@ -1064,10 +1096,8 @@ static bool LoadRenderAsset(
         if (colorTextureName[0])
         {
             const std::string texturePath =
-                JoinPath(
-                    texturesDirectory,
-                    std::string(colorTextureName) + ".dds"
-                );
+                ResolveResourceFile(texturesDirectory,gFallbackTexturesDirectory,
+                    std::string(colorTextureName) + ".dds");
 
             if (FileExists(
                 texturePath.c_str()))
@@ -1110,10 +1140,8 @@ static bool LoadRenderAsset(
         if (sourceMesh.overlay_color_texture[0])
         {
             const std::string overlayTexturePath =
-                JoinPath(
-                    texturesDirectory,
-                    std::string(sourceMesh.overlay_color_texture) + ".dds"
-                );
+                ResolveResourceFile(texturesDirectory,gFallbackTexturesDirectory,
+                    std::string(sourceMesh.overlay_color_texture) + ".dds");
 
             if (FileExists(overlayTexturePath.c_str()))
             {
@@ -1139,8 +1167,8 @@ static bool LoadRenderAsset(
 
         auto loadSpecial = [&](const char* name, bool overlay) {
             Texture2D result{};
-            if (name[0]) result = LoadTexture(JoinPath(texturesDirectory,
-                std::string(name) + ".dds").c_str());
+            if (name[0]) result = LoadTexture(ResolveResourceFile(texturesDirectory,
+                gFallbackTexturesDirectory,std::string(name) + ".dds").c_str());
             if (!result.id && !overlay) {
                 Image fallback = GenImageColor(1, 1, Color{128,128,128,128});
                 result = LoadTextureFromImage(fallback); UnloadImage(fallback);
@@ -1255,7 +1283,7 @@ static bool LoadRenderAsset(
         if (!std::isfinite(asset.animationRate) || asset.animationRate <= 0)
             asset.animation.error = "invalid authored animation rate";
         else if (!asset.animation.load(modelPath,
-            JoinPath(assetsDirectory, definition.preview_animation), source))
+            ResolveResourceFile(assetsDirectory,gFallbackAssetsDirectory,definition.preview_animation), source))
             TraceLog(LOG_WARNING, "Animation preview %s: %s", definition.resource,
                 asset.animation.error.c_str());
     }
@@ -1972,7 +2000,9 @@ static int BuildDefinitionList(const LvlxDefinitionTable& definitions,
 }
 
 static bool DefinitionSupportsWaylists(const LvlxElementDefinition* definition) {
-    return definition && definition->waylist_enabled != 0 &&
+    if (!definition) return false;
+    if (definition->name && std::strcmp(definition->name,"TD_Enemy_Spawn")==0) return true;
+    return definition->waylist_enabled != 0 &&
         std::isfinite(definition->speed) && definition->speed > 0.0f;
 }
 
@@ -2114,7 +2144,7 @@ static bool LoadLevelLightmaps(const std::string& levelPath,
             bytes.begin() + position + byteLength);
         position += byteLength;
         const std::string logical = TextFormat("lmaps_%s_%02u", stem.c_str(), i);
-        const std::string texturePath = JoinPath(texturesDirectory, logical + ".dds");
+        const std::string texturePath = ResolveResourceFile(texturesDirectory,gFallbackTexturesDirectory,logical + ".dds");
         Texture2D texture{};
         if (FileExists(texturePath.c_str())) {
             texture = LoadDxt1Lightmap(texturePath);
@@ -2376,7 +2406,7 @@ static bool BakeLevelLightmaps(const LvlxLevel& level,
         return false;
     }
     for (size_t slot = 0; slot < lightmaps.serializedNames.size(); ++slot) {
-        const std::string texturePath = JoinPath(texturesDirectory,
+        const std::string texturePath = ResolveResourceFile(texturesDirectory,gFallbackTexturesDirectory,
             TextFormat("lmaps_%s_%02u.dds", stem.c_str(), (unsigned)slot));
         if (slot >= lightmaps.textureFingerprints.size() ||
             FingerprintFile(texturePath) != lightmaps.textureFingerprints[slot]) {
@@ -3339,9 +3369,9 @@ int main(int argc, char** argv) {
     std::string binDirectory = FindBinDirectory(levelPath.c_str());
     const std::string defaultDefinitions = JoinPath(binDirectory, "settings/elements.txt");
     const char* definitionsPath = argc >= 3 ? argv[2] : defaultDefinitions.c_str();
-    std::string assetsDirectory = JoinPath(binDirectory, "assets");
-    std::string texturesDirectory = JoinPath(binDirectory, "textures");
-    std::string effectsDirectory = JoinPath(binDirectory, "effects");
+    if(argc>=3)binDirectory=DirectoryOf(DirectoryOf(NormalizePath(definitionsPath)));
+    std::string modDirectory,assetsDirectory,texturesDirectory,effectsDirectory;
+    ConfigureResourceDirectories(levelPath,binDirectory,modDirectory,assetsDirectory,texturesDirectory,effectsDirectory);
     LvlxLevel level{};
     LvlxDefinitionTable definitions{};
     if (!lvlx_load_level(levelPath.c_str(), &level)) {
@@ -3352,6 +3382,12 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "Could not load definitions: %s\n", definitionsPath);
         lvlx_free_level(&level);
         return 1;
+    }
+    const std::string modDefinitions = FindModElementDefinitions(levelPath);
+    if (!modDefinitions.empty() && Lowercase(NormalizePath(definitionsPath)) != Lowercase(modDefinitions) &&
+        !lvlx_append_definitions(modDefinitions.c_str(), &definitions)) {
+        std::fprintf(stderr, "Could not append mod definitions: %s\n", modDefinitions.c_str());
+        lvlx_free_definitions(&definitions);lvlx_free_level(&level);return 1;
     }
     std::unordered_set<uint32_t> companionLmdKeys = LoadLmdAttachmentKeys(levelPath);
     LoadEnvironment(binDirectory, levelPath);
@@ -4069,7 +4105,8 @@ int main(int argc, char** argv) {
                             const auto discoveredBin = mod_project::findBin(requestedPath);
                             const std::string replacementBin = discoveredBin.empty()
                                 ? binDirectory : NormalizePath(discoveredBin.string());
-                            const bool resourcesChanged = Lowercase(NormalizePath(
+                            const std::string replacementMod=FindModDirectory(requestedPath);
+                            const bool resourcesChanged = Lowercase(replacementMod)!=Lowercase(modDirectory)||Lowercase(NormalizePath(
                                 std::filesystem::absolute(replacementBin).string())) !=
                                 Lowercase(NormalizePath(std::filesystem::absolute(binDirectory).string()));
                             LvlxLevel replacement{};
@@ -4079,6 +4116,11 @@ int main(int argc, char** argv) {
                                 lvlx_free_definitions(&replacementDefinitions);
                                 status = "Could not load selected map's element definitions - current map retained";
                                 continue;
+                            }
+                            const std::string replacementModDefinitions=FindModElementDefinitions(requestedPath);
+                            if(resourcesChanged&&!replacementModDefinitions.empty()&&
+                                !lvlx_append_definitions(replacementModDefinitions.c_str(),&replacementDefinitions)){
+                                lvlx_free_definitions(&replacementDefinitions);status="Could not append selected mod's element definitions";continue;
                             }
                             if (lvlx_load_level(requestedPath.c_str(), &replacement)) {
                                 effectPreview.Unload();
@@ -4096,9 +4138,7 @@ int main(int argc, char** argv) {
                                     replacementDefinitions = {};
                                     assets.clear(); assets.resize(definitions.count);
                                     binDirectory = replacementBin;
-                                    assetsDirectory = JoinPath(binDirectory, "assets");
-                                    texturesDirectory = JoinPath(binDirectory, "textures");
-                                    effectsDirectory = JoinPath(binDirectory, "effects");
+                                    ConfigureResourceDirectories(requestedPath,binDirectory,modDirectory,assetsDirectory,texturesDirectory,effectsDirectory);
                                     physics.load(JoinPath(binDirectory, "settings/physics.txt"));
                                     BuildDefinitionList(definitions, elementSearch, paletteItems);
                                     paletteScroll = 0;
@@ -4625,7 +4665,7 @@ int main(int argc, char** argv) {
         if (effectsEnabled) {
             const auto effectNearClipping = gEnvironment.numbers(19);
             effectPreview.BuildFrame(level, definitions, camera, effectsDirectory,
-                texturesDirectory, effectElapsed, effectNearClipping[0],
+                texturesDirectory,gFallbackEffectsDirectory,gFallbackTexturesDirectory,effectElapsed,effectNearClipping[0],
                 effectNearClipping[1]);
         } else {
             const int noEffectLights = 0;

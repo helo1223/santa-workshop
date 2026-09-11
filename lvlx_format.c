@@ -1681,11 +1681,9 @@ cleanup:
     return status;
 }
 
-int lvlx_load_level(const char* dat_path, LvlxLevel* result)
+int lvlx_load_level_memory(const uint8_t* file_data, size_t file_size, LvlxLevel* result)
 {
-    uint8_t* file_data = NULL;
     uint8_t* decompressed = NULL;
-    size_t file_size;
     size_t produced;
     size_t trailing_size;
     uint32_t decompressed_size;
@@ -1693,12 +1691,10 @@ int lvlx_load_level(const char* dat_path, LvlxLevel* result)
     unsigned type = 0;
     int success = 0;
 
-    if (dat_path == NULL || result == NULL)
+    if (file_data == NULL || result == NULL)
         return 0;
     memset(result, 0, sizeof(*result));
-
-    file_data = read_file(dat_path, &file_size);
-    if (file_data == NULL || file_size < LVLX_HEADER_SIZE ||
+    if (file_size < LVLX_HEADER_SIZE ||
         memcmp(file_data, "lvlx", 4u) != 0)
         goto cleanup;
 
@@ -1747,6 +1743,18 @@ cleanup:
     if (!success)
         free_level(result);
     free(decompressed);
+    return success;
+}
+
+int lvlx_load_level(const char* dat_path, LvlxLevel* result)
+{
+    uint8_t* file_data;
+    size_t file_size = 0;
+    int success;
+    if (dat_path == NULL || result == NULL) return 0;
+    file_data = read_file(dat_path, &file_size);
+    if (file_data == NULL) return 0;
+    success = lvlx_load_level_memory(file_data, file_size, result);
     free(file_data);
     return success;
 }
@@ -1780,6 +1788,13 @@ int lvlx_load_definitions(const char* elements_path,
         return 0;
     }
     return 1;
+}
+
+int lvlx_append_definitions(const char* elements_path,
+    LvlxDefinitionTable* definitions)
+{
+    if (elements_path == NULL || definitions == NULL) return 0;
+    return load_definitions(elements_path, definitions);
 }
 
 void lvlx_free_definitions(LvlxDefinitionTable* definitions)
